@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-100">
+{% load static %}
+<head>
+  <meta charset="utf-8">
+  <title>GPT Chat Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- 1. Add Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 2. Add modern font (Inter) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- 3. Add Lucide Icons (FIX: Switched to jsdelivr CDN for reliability) -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide-icons/dist/lucide.min.js"></script>
+  
+  <!-- 4. Configure Tailwind & Set Font -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  
+  <!-- 5. Keep your original static CSS if needed for sub-pages -->
+  <link href="{% static 'analyzer/style.css' %}" rel="stylesheet">
+  
+  <style>
+    /* A small utility style for active nav links, if you pass a 'request' context */
+    .nav-active {
+      color: #0ea5e9; /* Tailwind's sky-500 */
+      background-color: #f0f9ff; /* Tailwind's sky-50 */
+    }
+  </style>
+</head>
+
+<body class="h-full font-sans antialiased">
+  <div class="flex flex-col min-h-screen">
+    
+    <!-- Modern Navbar -->
+    <nav class="bg-white shadow-sm border-b border-slate-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+          
+          <!-- Logo / Brand -->
+          <div class="flex items-center">
+            <a href="{% url 'home' %}" class="flex-shrink-0 flex items-center gap-2">
+              <!-- A simple logo placeholder -->
+              <span class="text-white bg-sky-500 p-1.5 rounded-lg">
+                <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-6.75 3h9m-9 3H12M3 3h18M3 21h18M12 3v18" />
+                </svg>
+              </span>
+              <span class="text-xl font-bold text-slate-800">
+                GPTChat <span class="text-sky-500">Analyzer</span>
+              </span>
+            </a>
+          </div>
+          
+          <!-- Nav Links -->
+          <div class="hidden sm:ml-6 sm:flex sm:space-x-1 sm:items-center">
+            <!-- 
+              Note: For active state, you'd add a template tag like:
+              class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}nav-active{% endif %}"
+            -->
+            <a href="{% url 'dashboard' %}" class="nav-link" data-icon="layout-dashboard">Dashboard</a>
+            <a href="{% url 'sentiment' %}" class="nav-link" data-icon="smile">Sentiment</a>
+            <a href="{% url 'topics' %}" class="nav-link" data-icon="tag">Topics</a>
+            <a href="{% url 'quality' %}" class="nav-link" data-icon="sparkles">Quality</a>
+            <a href="{% url 'repetition' %}" class="nav-link" data-icon="refresh-ccw">Repetition</a>
+
+          </div>
+          
+          <!-- CTA Button -->
+          <div class="flex items-center ml-4">
+            <a href="{% url 'upload' %}" class="cta-button">
+              <i data-lucide="upload" class="w-4 h-4 mr-1.5"></i>
+              Upload CSV
+            </a>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content Block -->
+    <main class="flex-grow">
+      <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div class="px-4 py-6 sm:px-0">
+          {% block content %}
+          <!-- Your page content (from other templates) will be inserted here -->
+          {% endblock %}
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 mt-12">
+      <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 text-center">
+        <p class="text-sm text-slate-500">
+          Created by Chaitanya Thakur • Powered by Python, Django, and ML
+        </p>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Script to initialize Lucide icons -->
+  <script>
+    // FIX: Switched to DOMContentLoaded, which fires earlier than 'load'
+    document.addEventListener('DOMContentLoaded', () => {
+      try {
+        // This finds all elements with data-lucide (like the 'upload' icon)
+        lucide.createIcons();
+
+        // Helper to add icons to nav links (which don't use <i> tags)
+        document.querySelectorAll('.nav-link').forEach(link => {
+          const iconName = link.getAttribute('data-icon');
+          if (iconName) {
+            const icon = lucide.icons[iconName];
+            if (icon) {
+              const svg = icon.toSvg({ class: 'w-4 h-4 mr-1.5' });
+              link.insertAdjacentHTML('afterbegin', svg);
+            }
+          }
+        });
+      } catch (e) {
+        console.error("Lucide icons failed to initialize:", e);
+      }
+    });
+  </script>
+  
+  <!-- Keep your Bootstrap JS (or switch to Alpine.js) if you need dropdowns/modals -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+<!-- Local Style Overrides -->
+<style>
+  /* Base styles for nav links */
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: #475569; /* slate-600 */
+    transition: all 0.2s ease-in-out;
+    text-decoration: none;
+  }
+  .nav-link:hover {
+    color: #0f172a; /* slate-900 */
+    background-color: #f1f5f9; /* slate-100 */
+  }
+  
+  /* Primary CTA button style */
+  .cta-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: white;
+    background-color: #0ea5e9; /* sky-500 */
+    border-radius: 0.5rem;
+    text-decoration: none;
+    transition: background-color 0.2s ease-in-out;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+  .cta-button:hover {
+    background-color: #0284c7; /* sky-600 */
+  }
+</style>

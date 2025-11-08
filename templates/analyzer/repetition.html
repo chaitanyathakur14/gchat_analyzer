@@ -1,0 +1,116 @@
+{% extends 'analyzer/base.html' %}
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-lg space-y-6">
+  <h2 class="text-2xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+    <i data-lucide="refresh-ccw" class="w-6 h-6 text-sky-500"></i> Repetition Analysis
+  </h2>
+
+  <!-- Average Repetition Score -->
+  <div class="flex items-center justify-between bg-sky-50 p-4 rounded-lg">
+    <p class="text-lg text-slate-700">Average Semantic Repetition Score</p>
+    <span class="text-3xl font-bold text-sky-600">{{ avg_score|default:"0.00" }}</span>
+  </div>
+
+  <!-- Search Similar Messages -->
+  <form method="get" class="flex gap-3 mt-6">
+    <input type="text" name="query" placeholder="🔍 Enter a message to find similar responses..."
+           value="{{ query|default:'' }}"
+           class="flex-grow border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
+    <button type="submit"
+            class="px-4 py-2 bg-sky-500 text-white font-semibold rounded-lg hover:bg-sky-600 transition">
+      Search
+    </button>
+  </form>
+
+  {% if similar_responses %}
+  <div class="mt-4">
+    <h3 class="text-lg font-semibold text-slate-800 mb-2">Top Similar Responses:</h3>
+    <ul class="list-disc list-inside text-slate-600 space-y-2">
+      {% for msg in similar_responses %}
+        <li>
+          <span class="font-semibold">{{ msg.Role|default:"Assistant" }}:</span>
+          {{ msg.Message|truncatechars:200 }}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <!-- Most Repetitive Pairs Table -->
+  {% if repetitive_pairs %}
+  <div class="mt-6">
+    <h3 class="text-lg font-semibold text-slate-800 mb-3">Top 10 Most Repetitive Message Pairs</h3>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Message 1</th>
+            <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Message 2</th>
+            <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Similarity</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for pair in repetitive_pairs %}
+          <tr>
+            <td class="px-4 py-2 text-slate-700">{{ pair.Message1|truncatechars:120 }}</td>
+            <td class="px-4 py-2 text-slate-700">{{ pair.Message2|truncatechars:120 }}</td>
+            <td class="px-4 py-2 text-sky-600 font-semibold">
+              {{ pair.similarity_score|floatformat:2 }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Chart.js Visualization -->
+{% if repetitive_pairs %}
+<div class="mt-8 bg-white p-6 rounded-lg shadow">
+  <h3 class="text-lg font-semibold text-slate-800 mb-3">Semantic Similarity Distribution</h3>
+  <canvas id="similarityChart"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const ctx = document.getElementById('similarityChart');
+  if (!ctx) return;
+
+  // ✅ Ensure repetitive_pairs is serialized safely for JavaScript
+  const data = JSON.parse('{{ repetitive_pairs_json|escapejs }}');
+  const labels = data.map((_, i) => 'Pair ' + (i + 1));
+  const scores = data.map(p => p.similarity_score);
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Similarity Score',
+        data: scores,
+        backgroundColor: 'rgba(14, 165, 233, 0.6)',
+        borderColor: 'rgba(14, 165, 233, 1)',
+        borderWidth: 1,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, max: 1 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `Score: ${ctx.parsed.y.toFixed(2)}`
+          }
+        }
+      }
+    }
+  });
+});
+</script>
+{% endif %}
+{% endblock %}

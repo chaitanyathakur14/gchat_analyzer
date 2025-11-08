@@ -1,0 +1,4 @@
+body { background: #f5fbfd; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto; }
+.card { border-radius: 12px; box-shadow: 0 8px 20px rgba(3, 7, 18, 0.06); }
+h1,h2,h3 { color:#0f172a; }
+.btn-primary { background: linear-gradient(90deg,#06b6d4,#3b82f6); border:none; }

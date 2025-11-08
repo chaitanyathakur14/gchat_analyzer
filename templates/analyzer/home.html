@@ -1,0 +1,324 @@
+{% extends 'analyzer/base.html' %}
+{% load static %} {% block content %}
+
+<style>
+  /* --- Global Page Setup (NEW DARK MODE) --- */
+  .page-container {
+    /* Rich, dark background from your example */
+    background-color: #f8f8f8; 
+    color: #03009e; /* Default text color is light */
+    padding-bottom: 4rem;
+    
+    position: relative; 
+    overflow: hidden; /* Prevent horizontal scroll */
+  }
+  
+  /* --- NEW: Particle Canvas Style --- */
+  #particle-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0; /* Sits behind content */
+  }
+
+  /* --- Hero Section (NEW GLOW EFFECT) --- */
+  .hero-section {
+    padding: 8rem 2rem 6rem 2rem; /* More top padding */
+    color: white;
+    text-align: center;
+    margin-bottom: 3rem;
+    
+    /* NEW: Position on top of canvas */
+    position: relative;
+    z-index: 1; /* Keeps it in the stacking order */
+    
+    /* NEW: This traps the canvas inside the hero section */
+    overflow: hidden; 
+    
+    /* Radial Glow Effect */
+    background-color: transparent; 
+    background-image: radial-gradient(
+      circle at 50% 30%,  /* Position the glow */
+      rgba(106, 17, 203, 0.35) 0%, /* Your purple, semi-transparent */
+      rgba(106, 17, 203, 0) 50%   /* Fades to transparent */
+    );
+    background-repeat: no-repeat;
+  }
+  
+  /* NEW: Rule to put hero text ON TOP of the canvas */
+  .hero-section .container {
+    position: relative;
+    z-index: 1; /* Above the z-index: 0 canvas */
+  }
+
+  .hero-section h1 {
+    font-size: 3.8rem; /* Slightly larger */
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: #510067;
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+  }
+
+  .hero-section p {
+    font-size: 1.25rem;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    color: #c0c0c0; /* Softer grey for subtext */
+    opacity: 1;
+  }
+
+  /* --- Features Section --- */
+  .features-section {
+    padding: 2rem 0;
+    
+    /* NEW: No longer needs position/z-index */
+    /* It's just a normal content block now */
+  }
+
+  .features-title {
+    text-align: center;
+    font-size: 2.5rem;
+    font-weight: 600;
+    margin-bottom: 2.5rem;
+    color: #ffffff; /* White text on dark background */
+  }
+
+  /* --- Feature Card Styling (NEW "GLASS" EFFECT) --- */
+  .feature-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
+    border-radius: 15px; 
+    padding: 2.5rem 2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    height: 100%; 
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .feature-card:hover {
+    transform: translateY(-8px); 
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(106, 17, 203, 0.5);
+    box-shadow: 0 10px 30px rgba(106, 17, 203, 0.2);
+  }
+
+  .feature-card-icon {
+    font-size: 3rem; 
+    color: #6a11cb; /* Your purple accent */
+    margin-bottom: 1.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .feature-card:hover .feature-card-icon {
+    transform: scale(1.1);
+  }
+
+  .feature-card h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: #410157; /* White text */
+  }
+
+  .feature-card p {
+    font-size: 1rem;
+    color: #b0b0b0; /* Light grey subtext */
+    flex-grow: 1; 
+    margin-bottom: 1.5rem;
+  }
+
+  /* --- "Ghost" Button Style --- */
+  .btn-feature-card {
+    background-color: transparent;
+    color: #f0f0f0;
+    font-weight: 500;
+    width: 100%;
+    border: 2px solid #6a11cb; /* Purple border */
+    border-radius: 50px; /* Pill shape */
+    padding: 0.6rem 0;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-feature-card:hover {
+    background-color: #6a11cb; /* Fills with purple */
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(106, 17, 203, 0.4); /* Purple glow */
+  }
+</style>
+
+
+<div class="page-container">
+  
+  <div class="hero-section">
+    
+    <canvas id="particle-canvas"></canvas>
+  
+    <div class="container">
+      <br>
+      <br>
+      <br>
+      <br>
+      <h1 style="color: rgb(172, 0, 175);">Analyze Your AI Conversations</h1>
+      <p style="color: rgb(58, 1, 59);">
+        Welcome to your personal AI chat dashboard. Explore insights, 
+        analyze sentiment, and discover the topics you talk about most.
+      </p>
+      </div>
+      <br>
+      <br>
+      <br>
+      <br>
+      <br>
+  </div>
+
+  <div class="container features-section">
+    <h2 class="features-title" style="color: #99a3f3;">Explore Your Data</h2>
+    
+    <div class="row">
+      
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="feature-card">
+          <div>
+            <div class="feature-card-icon"><i class="bi bi-bar-chart-line-fill"></i></div> 
+            <h3>Dashboard</h3>
+            <p>Get a complete overview of your chat activity, key metrics, and usage patterns all in one place.</p>
+          </div>
+          <a href="{% url 'dashboard' %}" class="btn btn-feature-card" style="color: #009ac4;">View Dashboard</a>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="feature-card">
+          <div>
+            <div class="feature-card-icon"><i class="bi bi-emoji-smile-fill"></i></div> 
+            <h3>Sentiment Analysis</h3>
+            <p>Track the emotional tone of your conversations over time. See positive, negative, and neutral trends.</p>
+          </div>
+          <a href="{% url 'sentiment' %}" class="btn btn-feature-card" style="color: #009ac4;">Analyze Sentiment</a>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="feature-card">
+          <div>
+            <div class="feature-card-icon"><i class="bi bi-tags-fill"></i></div> 
+            <h3>Topic Modeling</h3>
+            <p>Automatically discover the main topics and themes you discuss most frequently in your chats.</p>
+          </div>
+          <a href="{% url 'topics' %}" class="btn btn-feature-card" style="color: #009ac4;">Discover Topics</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const canvas = document.getElementById('particle-canvas');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    const particleCount = 150; // Number of particles
+    const colors = ['#FFFFFF', '#6a11cb', '#c0c0c0']; // White, Purple, Grey
+
+    function setCanvasSize() {
+      // UPDATED: Now targets the hero-section
+      const container = document.querySelector('.hero-section'); 
+      if (container) {
+        canvas.width = container.scrollWidth;
+        canvas.height = container.scrollHeight;
+      }
+    }
+
+    function random(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    // Particle class
+    class Particle {
+      constructor() {
+        this.reset();
+      }
+
+      reset() {
+        this.x = random(0, canvas.width);
+        this.y = random(0, canvas.height);
+        this.radius = random(0.5, 2.5);
+        this.color = colors[Math.floor(random(0, colors.length))];
+        
+        this.vx = random(-0.1, 0.1); // Slower horizontal drift
+        this.vy = random(-0.1, 0.1); // Slower vertical drift
+        this.opacity = random(0.3, 1.0); // Start more opaque
+        
+        this.fade = random(0.00001, 0.000015); // 15-min fade
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.opacity -= this.fade;
+
+        // Reset particle if it fades out or goes off-screen
+        if (this.opacity <= 0 || this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+          this.reset();
+          // Start it just off-screen to drift in
+          this.y = random(0, canvas.height);
+          this.x = this.vx > 0 ? -this.radius : canvas.width + this.radius;
+          // Give it a fresh opacity
+          this.opacity = random(0.3, 1.0);
+        }
+      }
+
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = this.opacity;
+        ctx.fill();
+        ctx.closePath();
+      }
+    }
+
+    // Initialize particles
+    function init() {
+      setCanvasSize();
+      particles = [];
+      for (let i = 0; i < particleCount; i++) {
+        particles.push(new Particle());
+      }
+    }
+
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Reset alpha
+      ctx.globalAlpha = 1;
+
+      for (const particle of particles) {
+        particle.update();
+        particle.draw();
+      }
+    }
+    
+    // Start
+    init();
+    animate();
+
+    // Re-initialize on window resize
+    window.addEventListener('resize', init);
+  });
+</script>
+
+{% endblock %}

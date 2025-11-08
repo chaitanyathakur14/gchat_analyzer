@@ -1,0 +1,171 @@
+{% extends 'analyzer/base.html' %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+  
+  <!-- 1. Page Header -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold text-slate-900">Response Quality Analysis</h1>
+    <p class="text-lg text-slate-600 mt-1">Review the best and worst performing messages from your chat logs.</p>
+  </div>
+
+  <!-- 2. Interactive Tab Navigation -->
+  <div>
+    <div class="sm:hidden">
+      <!-- Mobile: Simple dropdown -->
+      <label for="tabs" class="sr-only">Select a tab</label>
+      <select id="tabs" name="tabs" class="block w-full rounded-md border-gray-300 focus:border-sky-500 focus:ring-sky-500">
+        <option selected>Top 10</option>
+        <option>Lowest 10</option>
+      </select>
+    </div>
+    <div class="hidden sm:block">
+      <!-- Desktop: Tab buttons -->
+      <div class="border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+          <button id="tab-top" class="tab-button tab-active" aria-current="page" onclick="switchTab('top')">
+            Top 10
+          </button>
+          <button id="tab-bottom" class="tab-button" onclick="switchTab('bottom')">
+            Lowest 10
+          </button>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Tab Content Panels -->
+  <div class="mt-6 space-y-4">
+    
+    <!-- Top 10 Panel -->
+    <div id="content-top" class="tab-panel space-y-4">
+      {% for r in top %}
+        <div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-semibold text-slate-800">Quality Score:</span>
+            <!-- Score Badge (Green) -->
+            <span class="inline-flex items-center rounded-full bg-green-100 px-3 py-0.5 text-sm font-semibold text-green-800">
+              {{ r.quality_score }}
+            </span>
+          </div>
+          <!-- Interactive Text Container -->
+          <div class="response-container text-slate-700">
+            <!-- Short, truncated version -->
+            <div class="response-short">
+              {{ r.Message|truncatechars:120 }}
+              {% if r.Message|length > 120 %}
+                <button class="expand-button" onclick="toggleResponse(this)">Show More</button>
+              {% endif %}
+            </div>
+            <!-- Full, hidden version -->
+            <div class="response-full hidden">
+              {{ r.Message|linebreaksbr }}
+              <button class="expand-button" onclick="toggleResponse(this)">Show Less</button>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Lowest 10 Panel -->
+    <div id="content-bottom" class="tab-panel hidden space-y-4">
+      {% for r in bottom %}
+        <div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-semibold text-slate-800">Quality Score:</span>
+            <!-- Score Badge (Red) -->
+            <span class="inline-flex items-center rounded-full bg-red-100 px-3 py-0.5 text-sm font-semibold text-red-800">
+              {{ r.quality_score }}
+            </span>
+          </div>
+          <!-- Interactive Text Container -->
+          <div class="response-container text-slate-700">
+            <!-- Short, truncated version -->
+            <div class="response-short">
+              {{ r.Message|truncatechars:120 }}
+              {% if r.Message|length > 120 %}
+                <button class="expand-button" onclick="toggleResponse(this)">Show More</button>
+              {% endif %}
+            </div>
+            <!-- Full, hidden version -->
+            <div class="response-full hidden">
+              {{ r.Message|linebreaksbr }}
+              <button class="expand-button" onclick="toggleResponse(this)">Show Less</button>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+
+<!-- Page-specific styles -->
+<style>
+  .tab-button {
+    @apply whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium;
+    @apply border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700;
+  }
+  .tab-active {
+    @apply border-sky-500 text-sky-600;
+  }
+  .expand-button {
+    @apply text-sm font-semibold text-sky-600 hover:text-sky-500 ml-1;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+  .response-full {
+    @apply prose prose-sm max-w-none;
+  }
+</style>
+
+<!-- Page-specific JavaScript for interactivity -->
+<script>
+  // Function to toggle between "Show More" and "Show Less"
+  function toggleResponse(button) {
+    const container = button.closest('.response-container');
+    if (!container) return;
+
+    const shortView = container.querySelector('.response-short');
+    const fullView = container.querySelector('.response-full');
+
+    shortView.classList.toggle('hidden');
+    fullView.classList.toggle('hidden');
+  }
+
+  // Function to switch tabs
+  function switchTab(tab) {
+    const topTab = document.getElementById('tab-top');
+    const bottomTab = document.getElementById('tab-bottom');
+    const topContent = document.getElementById('content-top');
+    const bottomContent = document.getElementById('content-bottom');
+
+    if (tab === 'top') {
+      topTab.classList.add('tab-active');
+      bottomTab.classList.remove('tab-active');
+      topContent.classList.remove('hidden');
+      bottomContent.classList.add('hidden');
+    } else {
+      topTab.classList.remove('tab-active');
+      bottomTab.classList.add('tab-active');
+      topContent.classList.add('hidden');
+      bottomContent.classList.remove('hidden');
+    }
+  }
+
+  // Sync mobile dropdown with tab content
+  const mobileTabs = document.getElementById('tabs');
+  if (mobileTabs) {
+    mobileTabs.addEventListener('change', (event) => {
+      if (event.target.value === 'Top 10') {
+        switchTab('top');
+      } else {
+        switchTab('bottom');
+      }
+    });
+  }
+</script>
+
+{% endblock %}

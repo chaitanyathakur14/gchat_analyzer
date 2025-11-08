@@ -1,0 +1,253 @@
+{% extends 'analyzer/base.html' %}
+{% load static %}
+{% block content %}
+<div class="container mt-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="fw-bold">🧠 GPT Chat Analyzer — Interactive Dashboard</h2>
+    <div class="d-flex gap-2">
+      <select id="conversationFilter" class="form-select form-select-sm">
+        <option value="__all__">All Conversations</option>
+      </select>
+      <input id="globalSearch" class="form-control form-control-sm" placeholder="🔍 Search messages or conversations...">
+      <button id="refreshBtn" class="btn btn-sm btn-primary">Refresh</button>
+    </div>
+  </div>
+
+  <!-- KPI Row -->
+  <div class="row mb-3">
+    <div class="col-md-3">
+      <div class="card p-3 text-center shadow-sm">
+        <h6>Model Accuracy</h6>
+        <h3 id="kpiAccuracy">--%</h3>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 text-center shadow-sm">
+        <h6>Validation Loss</h6>
+        <h3 id="kpiLoss">--</h3>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 text-center shadow-sm">
+        <h6>Positive</h6>
+        <h3 id="kpiPositive">--</h3>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 text-center shadow-sm">
+        <h6>Repetitive Messages</h6>
+        <h3 id="kpiRepetition">--</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="row">
+    <div class="col-md-8">
+      <div id="mainChart" style="height:420px;"></div>
+    </div>
+    <div class="col-md-4">
+      <div class="card mb-3 p-3">
+        <h6>Top Topics</h6>
+        <ul id="topicsList" class="list-unstyled mb-0"></ul>
+      </div>
+      <div class="card p-3">
+        <h6>Conversation Activity</h6>
+        <div id="activityChart" style="height:220px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div class="card mt-3 p-3 shadow-sm">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0">Messages</h5>
+      <div>
+        <select id="sentimentFilter" class="form-select form-select-sm d-inline-block" style="width:140px;">
+          <option value="">All Sentiments</option>
+          <option>Positive</option><option>Neutral</option><option>Negative</option>
+        </select>
+        <button id="showRepetitions" class="btn btn-sm btn-outline-danger">Repetition Check</button>
+      </div>
+    </div>
+    <div style="max-height:360px; overflow:auto;">
+      <table class="table table-sm mb-0">
+        <thead class="table-light">
+          <tr><th>Role</th><th>Conversation</th><th>Sentiment</th><th>Text</th></tr>
+        </thead>
+        <tbody id="messagesTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Similar Responses -->
+  <div class="card mt-4 p-3 shadow-sm">
+    <h5>🔎 Find Similar Responses (KNN)</h5>
+    <div class="d-flex mb-2 gap-2">
+      <input id="queryInput" class="form-control" placeholder="Type a message to find similar ones...">
+      <button id="findSimilarBtn" class="btn btn-sm btn-success">Find</button>
+    </div>
+    <ul id="similarList" class="list-group"></ul>
+  </div>
+
+</div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+(async function(){
+  const kAcc = document.getElementById('kpiAccuracy');
+  const kLoss = document.getElementById('kpiLoss');
+  const kPos = document.getElementById('kpiPositive');
+  const kRep = document.getElementById('kpiRepetition');
+  const topicsList = document.getElementById('topicsList');
+  const messagesTbody = document.getElementById('messagesTbody');
+  const sentimentFilter = document.getElementById('sentimentFilter');
+  const showRepetitions = document.getElementById('showRepetitions');
+  const queryInput = document.getElementById('queryInput');
+  const findSimilarBtn = document.getElementById('findSimilarBtn');
+  const similarList = document.getElementById('similarList');
+  const mainChart = document.getElementById('mainChart');
+  const activityChart = document.getElementById('activityChart');
+  const conversationFilter = document.getElementById('conversationFilter');
+  const globalSearch = document.getElementById('globalSearch');
+  const refreshBtn = document.getElementById('refreshBtn');
+
+  const API_BASE = window.location.origin;
+
+  async function fetchJSON(url, options={}) {
+    const r = await fetch(url, { credentials: 'same-origin', ...options });
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+
+  async function loadConversations(){
+    try {
+      const data = await fetchJSON(`/api/conversations/`);
+      const convs = data.conversations || [];
+      conversationFilter.innerHTML = '<option value="__all__">All Conversations</option>';
+      convs.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        conversationFilter.appendChild(opt);
+      });
+    } catch(err) { console.error('loadConversations:', err); }
+  }
+
+  async function loadMetrics(selectedConversation="__all__"){
+    try {
+      const url = new URL(`${API_BASE}/api/metrics/`);
+      if(selectedConversation) url.searchParams.set('conversation', selectedConversation);
+      const data = await fetchJSON(url);
+
+      kAcc.innerText = data.accuracy ? data.accuracy.toFixed(2) + "%" : "--";
+      kLoss.innerText = data.loss ? data.loss.toFixed(3) : "--";
+      kPos.innerText = data.positive_percent ? data.positive_percent.toFixed(2) + "" : "--";
+      kRep.innerText = data.repetitive_percent ? data.repetitive_percent.toFixed(2) + "" : "--";
+
+      const topics = await fetchJSON(`/api/topics/`);
+
+
+      if(topics && Object.keys(topics).length){
+        topicsList.innerHTML = "";
+        Object.entries(topics).forEach(([topic, count]) => {
+          const li = document.createElement("li");
+          li.textContent = `${topic} — ${count}`;
+          topicsList.appendChild(li);
+        });
+        Plotly.react(mainChart, [{
+          type: "bar", x: Object.keys(topics), y: Object.values(topics),
+          marker: { color: "#007bff" }
+        }], { title: "Top Topics", height: 420 });
+      } else {
+        topicsList.innerHTML = "<li>No topics available</li>";
+        Plotly.react(mainChart, [], { title: "No topic data", height: 420 });
+      }
+
+      const activity = await fetchJSON(`/api/activity/`);
+      if(activity && Object.keys(activity).length){
+        Plotly.react(activityChart, [{
+          type: "scatter",
+          mode: "lines+markers",
+          x: Object.keys(activity),
+          y: Object.values(activity),
+          marker: { color: "#28a745" }
+        }], { title: "Conversation Activity", height: 220 });
+      } else {
+        Plotly.react(activityChart, [], { title: "No conversation data", height: 220 });
+      }
+    } catch(err){
+      console.error("loadMetrics error", err);
+    }
+  }
+
+  async function loadMessages({ q='', sentiment='', conversation='__all__', limit=200 } = {}){
+    try{
+      const url = new URL(`${API_BASE}/api/messages/`);
+      if(q) url.searchParams.set('q', q);
+      if(sentiment) url.searchParams.set('sentiment', sentiment);
+      if(conversation) url.searchParams.set('conversation', conversation);
+      url.searchParams.set('limit', limit);
+
+      const data = await fetchJSON(url);
+      const msgs = data.messages || [];
+      messagesTbody.innerHTML = '';
+      msgs.forEach(m => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${m.Role}</td><td>${m.Conversation_Title}</td><td>${m.Sentiment_Label}</td><td>${m.Message}</td>`;
+        messagesTbody.appendChild(tr);
+      });
+      return msgs;
+    } catch(err){
+      console.error('loadMessages error', err);
+      messagesTbody.innerHTML = '<tr><td colspan="4">Error loading messages</td></tr>';
+      return [];
+    }
+  }
+
+  conversationFilter.onchange = async () => {
+    await loadMetrics(conversationFilter.value);
+    await loadMessages({ conversation: conversationFilter.value });
+  };
+
+  sentimentFilter.onchange = () => loadMessages({
+    sentiment: sentimentFilter.value,
+    conversation: conversationFilter.value
+  });
+
+  globalSearch.addEventListener('input', e => loadMessages({
+    q: e.target.value,
+    conversation: conversationFilter.value
+  }));
+
+  refreshBtn.onclick = async () => {
+    await loadConversations();
+    await loadMetrics(conversationFilter.value);
+    await loadMessages({ conversation: conversationFilter.value });
+  };
+
+  showRepetitions.onclick = () => {
+    fetchJSON(`${API_BASE}/api/metrics/`)
+      .then(d => alert('Average semantic repetition score: ' + (d.repetition ?? 0)))
+      .catch(() => alert('Could not get repetition metric'));
+  };
+
+  findSimilarBtn.onclick = async () => {
+    similarList.innerHTML = '';
+    const results = await loadMessages({ q: queryInput.value, limit: 10 });
+    results.slice(0,5).forEach(r => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item';
+      li.innerHTML = `<strong>${r.Role} (${r.Conversation_Title})</strong><br>${r.Message}<br><small>Sentiment: ${r.Sentiment_Label || 'N/A'}</small>`;
+      similarList.appendChild(li);
+    });
+  };
+
+  await loadConversations();
+  await loadMetrics();
+  await loadMessages();
+})();
+</script>
+
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends 'analyzer/base.html' %}
+{% block content %}
+<div class="card p-4">
+  <h3>Upload Chat CSV</h3>
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="btn btn-primary" type="submit">Upload</button>
+  </form>
+
+  <small class="text-muted mt-3 d-block">
+    Upload the file exported from ChatGPT (chatgpt_chats_clean.csv).
+  </small>
+
+  <hr>
+
+  {% if has_upload %}
+    <h5 class="text-success mt-3">✅ Showing your uploaded chats</h5>
+
+    <!-- Delete CSV / Reset Button -->
+    <form method="post" action="{% url 'reset_csv' %}" onsubmit="return confirm('Are you sure you want to delete your uploaded CSV and revert to the default dataset?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger mt-2">Delete Uploaded CSV</button>
+    </form>
+
+  {% else %}
+    <h5 class="text-info mt-3">📘 Showing default ChatGPT chats (developer’s data)</h5>
+  {% endif %}
+
+  <div class="mt-3">
+    {{ chat_preview|safe }}
+  </div>
+</div>
+{% endblock %}

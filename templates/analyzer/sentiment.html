@@ -1,0 +1,362 @@
+{% extends 'analyzer/base.html' %}
+{% load static %}
+{% block content %}
+<div class="card p-4">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="text-xl font-semibold">Sentiment Summary</h3>
+    <div class="flex gap-2">
+      <button id="refreshBtn" class="btn">Refresh</button>
+      <button id="exportBtn" class="btn">Export CSV</button>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <!-- Controls -->
+    <div class="space-y-3">
+      <label class="block"><strong>Conversation</strong></label>
+      <select id="conversationSelect" class="w-full p-2 border rounded">
+        <option value="__all__">All Conversations</option>
+      </select>
+
+      <label class="block mt-2"><strong>Chart Type</strong></label>
+      <select id="chartType" class="w-full p-2 border rounded">
+        <option value="pie">Pie</option>
+        <option value="bar">Bar</option>
+      </select>
+
+      <label class="block mt-2"><strong>Search messages (drill)</strong></label>
+      <input id="searchInput" class="w-full p-2 border rounded" placeholder="Search text..." />
+
+      <div id="msgCount" class="text-sm text-muted mt-2"></div>
+
+      <div id="alert" class="hidden p-2 rounded text-sm"></div>
+
+      <div id="loadingSmall" class="hidden">Loading…</div>
+    </div>
+
+    <!-- Chart -->
+    <div class="md:col-span-2">
+      <div id="chartArea" style="height:420px;"></div>
+
+      <div id="legendArea" class="mt-3"></div>
+    </div>
+  </div>
+
+  <!-- Drill / messages -->
+  <div class="mt-6">
+    <h4 class="font-semibold">Sample Messages (drill)</h4>
+    <div class="flex gap-2 my-2">
+      <button id="showPositive" class="btn small">Show Positive</button>
+      <button id="showNeutral" class="btn small">Show Neutral</button>
+      <button id="showNegative" class="btn small">Show Negative</button>
+    </div>
+
+    <div id="messagesTable" class="overflow-auto border rounded p-3" style="max-height:300px;">
+      <table id="msgs" class="w-full text-left">
+        <thead><tr><th style="width:10%">Role</th><th style="width:15%">Conversation</th><th>Message</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{{ counts|json_script:"counts-data" }}
+
+
+<!-- Plotly -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<script>
+(async function() {
+  const countsDataEl = document.getElementById('counts-data');
+  let countsFallback = {};
+  try {
+    countsFallback = countsDataEl ? JSON.parse(countsDataEl.textContent || '{}') : {};
+  } catch (e) {
+    countsFallback = {};
+  }
+
+  // DOM
+  const convSelect = document.getElementById('conversationSelect');
+  const chartArea = document.getElementById('chartArea');
+  const chartTypeSel = document.getElementById('chartType');
+  const searchInput = document.getElementById('searchInput');
+  const alertEl = document.getElementById('alert');
+  const loadingSmall = document.getElementById('loadingSmall');
+  const msgsTbody = document.querySelector('#msgs tbody');
+  const msgCount = document.getElementById('msgCount');
+
+  // Buttons
+  document.getElementById('refreshBtn').addEventListener('click', loadAndRender);
+  document.getElementById('exportBtn').addEventListener('click', exportCSV);
+  document.getElementById('showPositive').addEventListener('click', ()=>fetchMessagesBySentiment('Positive'));
+  document.getElementById('showNeutral').addEventListener('click', ()=>fetchMessagesBySentiment('Neutral'));
+  document.getElementById('showNegative').addEventListener('click', ()=>fetchMessagesBySentiment('Negative'));
+
+  // Chart interactions
+  chartTypeSel.addEventListener('change', () => renderChart(currentCounts));
+  searchInput.addEventListener('input', debounce(() => fetchMessagesByQuery(searchInput.value), 500));
+
+  // State
+  let conversations = [];      // list of conversation titles
+  let currentCounts = {};      // {Positive: n, Neutral: n, Negative: n}
+  let rawMessages = [];        // [{Conversation_Title, Role, Message, Sentiment_Label}, ...]
+
+  // Try to fetch from APIs if available; otherwise use fallback counts
+  async function fetchConversations() {
+    try {
+      const res = await fetch('/api/conversations/');
+      if (!res.ok) throw new Error('No API');
+      const data = await res.json();
+      return data.conversations || [];
+    } catch (e) {
+      // fallback: try to build from rawMessages (if loaded) or return empty
+      const set = new Set(rawMessages.map(m=>m.Conversation_Title));
+      return Array.from(set);
+    }
+  }
+
+  async function fetchAllMessages(conversation='__all__') {
+    // Preferred: hit backend endpoint for messages with optional conversation filter
+    try {
+      const url = conversation === '__all__' ? '/api/messages/' : `/api/messages/?conversation=${encodeURIComponent(conversation)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('No API');
+      const data = await res.json();
+      rawMessages = data.messages || [];
+      return rawMessages;
+    } catch (e) {
+      // fallback: no API — attempt to reconstruct messages from server-side CSV export
+      // If you exported assistant_sentiment_results.csv to media/uploads, you could fetch it here.
+      return [];
+    }
+  }
+
+  async function fetchSummary(conversation='__all__') {
+    // Preferred: backend endpoint that returns counts per conversation
+    try {
+      const url = conversation === '__all__' ? '/api/sentiment-summary/' : `/api/sentiment-summary/?conversation=${encodeURIComponent(conversation)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('No API');
+      const data = await res.json();
+      return data.counts || {};
+    } catch (e) {
+      // fallback to server-injected counts if present
+      if (Object.keys(countsFallback).length) return countsFallback;
+      return {'Positive':0,'Neutral':0,'Negative':0};
+    }
+  }
+
+  // Render chart based on counts
+  function renderChart(counts) {
+    const t = chartTypeSel.value || 'pie';
+    const labels = ['Positive','Neutral','Negative'];
+    const values = labels.map(l => counts[l] || 0);
+
+    // Update message count
+    const total = values.reduce((a,b)=>a+b,0);
+    msgCount.textContent = `Total messages: ${total}`;
+
+    const commonLayout = {
+      margin: { t: 20, b: 40, l: 20, r: 20 }
+    };
+
+    if (t === 'pie') {
+      const data = [{
+        values, labels, type: 'pie',
+        marker: { colors: ['#06b6d4','#7dd3fc','#60a5fa'] },
+        textinfo: 'percent+label',
+        hoverinfo: 'label+value+percent'
+      }];
+      Plotly.react(chartArea, data, {...commonLayout, height:420});
+    } else {
+      const data = [{
+        x: labels, y: values, type: 'bar',
+        marker: { color: ['#06b6d4','#7dd3fc','#60a5fa'] }
+      }];
+      Plotly.react(chartArea, data, {...commonLayout, height:420});
+    }
+
+    // create clickable legend / drill hints
+    generateLegend(labels, values);
+  }
+
+  function generateLegend(labels, values) {
+    const legendArea = document.getElementById('legendArea');
+    legendArea.innerHTML = '';
+    labels.forEach((lab, i) => {
+      const el = document.createElement('button');
+      el.className = 'btn small';
+      el.style.marginRight = '6px';
+      el.textContent = `${lab}: ${values[i] || 0}`;
+      el.onclick = () => fetchMessagesBySentiment(lab);
+      legendArea.appendChild(el);
+    });
+  }
+
+  // Fetch messages for a sentiment and show in table
+  async function fetchMessagesBySentiment(sentiment) {
+    setAlert('', false);
+    showLoading(true);
+    try {
+      // preferred API
+      const url = `/api/messages/?sentiment=${encodeURIComponent(sentiment)}&limit=50`;
+      const res = await fetch(url);
+      let msgs = [];
+      if (res.ok) {
+        const data = await res.json();
+        msgs = data.messages || [];
+      } else {
+        // fallback: use client-side rawMessages
+        msgs = rawMessages.filter(m => (m.Sentiment_Label || '').toLowerCase() === sentiment.toLowerCase());
+      }
+      populateMessagesTable(msgs);
+    } catch (e) {
+      setAlert('Unable to fetch messages for that sentiment (no backend API). Showing nothing.', true);
+      populateMessagesTable([]);
+    } finally {
+      showLoading(false);
+    }
+  }
+
+  // Search-based fetch
+  async function fetchMessagesByQuery(q) {
+    if (!q) { populateMessagesTable([]); return; }
+    showLoading(true);
+    try {
+      const url = `/api/messages/?q=${encodeURIComponent(q)}&limit=100`;
+      const res = await fetch(url);
+      let msgs = [];
+      if (res.ok) {
+        msgs = (await res.json()).messages || [];
+      } else {
+        // client-side filter fallback
+        msgs = rawMessages.filter(m => (m.Message||'').toLowerCase().includes(q.toLowerCase()));
+      }
+      populateMessagesTable(msgs);
+    } catch (e) {
+      setAlert('Search failed.', true);
+      populateMessagesTable([]);
+    } finally {
+      showLoading(false);
+    }
+  }
+
+  function populateMessagesTable(msgs) {
+    msgsTbody.innerHTML = '';
+    if (!msgs.length) {
+      msgsTbody.innerHTML = '<tr><td colspan="3" class="text-muted">No messages to display.</td></tr>';
+      return;
+    }
+    msgs.forEach(m => {
+      const tr = document.createElement('tr');
+      const role = `<td>${escapeHtml(m.Role || '')}</td>`;
+      const conv = `<td>${escapeHtml(m.Conversation_Title || m.Conversation || '')}</td>`;
+      const msg = `<td>${escapeHtml((m.Message || '').slice(0,400))}</td>`;
+      tr.innerHTML = role + conv + msg;
+      msgsTbody.appendChild(tr);
+    });
+  }
+
+  // Export CSV (download current messages shown or counts)
+  function exportCSV() {
+    // If table has rows, pull them; otherwise export counts summary
+    const rows = Array.from(msgsTbody.querySelectorAll('tr'));
+    if (rows.length && rows[0].querySelectorAll('td').length > 1) {
+      const csv = [['Role','Conversation','Message']];
+      rows.forEach(r => {
+        const cols = Array.from(r.querySelectorAll('td')).map(td => td.textContent.replace(/\n/g,' ').trim());
+        if (cols.length === 3) csv.push(cols);
+      });
+      downloadCsv(csv, 'messages_export.csv');
+    } else {
+      const counts = currentCounts || countsFallback || {'Positive':0,'Neutral':0,'Negative':0};
+      const csv = [['Label','Count'], ['Positive',counts.Positive||0], ['Neutral',counts.Neutral||0], ['Negative',counts.Negative||0]];
+      downloadCsv(csv, 'sentiment_summary.csv');
+    }
+  }
+
+  function downloadCsv(rows, filename) {
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Load and render initial data
+  async function loadAndRender() {
+    setAlert('', false);
+    showLoading(true);
+    try {
+      // load messages (attempt API), build conversation dropdown
+      rawMessages = await fetchAllMessages();
+      conversations = await fetchConversations();
+      // populate conversation select
+      convSelect.innerHTML = '<option value="__all__">All Conversations</option>';
+      conversations.forEach(c => {
+        const o = document.createElement('option'); o.value = c; o.textContent = c; convSelect.appendChild(o);
+      });
+
+      // listen for conversation change
+      convSelect.onchange = async () => {
+        const conv = convSelect.value;
+        currentCounts = await fetchSummary(conv);
+        renderChart(currentCounts);
+        // optionally pre-load messages for that conversation
+        rawMessages = await fetchAllMessages(conv);
+        populateMessagesTable([]);
+      };
+
+      // initial counts (try API, fallback to injected)
+      currentCounts = await fetchSummary('__all__');
+      renderChart(currentCounts);
+    } catch (e) {
+      console.error(e);
+      setAlert('Failed to load data. Ensure backend endpoints exist or provide counts in template.', true);
+      // fallback: use injected counts
+      currentCounts = countsFallback || {'Positive':0,'Neutral':0,'Negative':0};
+      renderChart(currentCounts);
+    } finally {
+      showLoading(false);
+    }
+  }
+
+  // Small helpers
+  function setAlert(msg, isError=false) {
+    if (!msg) { alertEl.classList.add('hidden'); return; }
+    alertEl.classList.remove('hidden');
+    alertEl.textContent = msg;
+    alertEl.style.backgroundColor = isError ? '#fee2e2' : '#ecfccb';
+    alertEl.style.color = isError ? '#991b1b' : '#064e3b';
+  }
+
+  function showLoading(flag) {
+    loadingSmall.classList.toggle('hidden', !flag);
+  }
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"'`=\/]/g, function(s) {
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','=':'&#x3D;','`':'&#x60;'})[s];
+    });
+  }
+
+  function debounce(fn, wait=300) {
+    let t;
+    return function(...args) { clearTimeout(t); t = setTimeout(()=>fn.apply(this,args), wait); };
+  }
+
+  // Initialize
+  await loadAndRender();
+})();
+</script>
+
+<style>
+/* tiny helpers (you can style using your Tailwind/utility CSS) */
+.btn { background:#0ea5a6;color:#fff;padding:.4rem .6rem;border-radius:6px;border:none;cursor:pointer }
+.btn.small{ padding:.28rem .5rem;font-size:.9rem }
+.text-muted{ color:#6b7280 }
+.hidden{ display:none }
+</style>
+{% endblock %}

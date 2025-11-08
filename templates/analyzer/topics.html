@@ -1,0 +1,59 @@
+{% extends 'analyzer/base.html' %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+
+  <!-- 1. Page Header -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold text-slate-900">Topic Modeling</h1>
+    <p class="text-lg text-slate-600 mt-1">Key themes and topics discovered from your chat data using ML.</p>
+  </div>
+
+  <!-- 2. Grid for Topic Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    
+    {% for t in topics %}
+      <!-- Topic Card -->
+      <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+        
+        <!-- Card Header -->
+        <div class="p-4 border-b border-gray-100 bg-slate-50">
+          <h3 class="text-lg font-semibold text-slate-800">
+            <!-- Add a small icon for visual flair -->
+            <i data-lucide="hash" class="w-5 h-5 inline-block mr-2 text-sky-500"></i>
+            Topic {{ t.topic_id }}
+          </h3>
+        </div>
+        
+        <!-- Card Body with Keyword Badges -->
+        <div class="p-4">
+          <p class="text-sm text-slate-500 mb-3">Key terms for this topic:</p>
+          <div class="flex flex-wrap gap-2">
+            
+            {% for term in t.terms %}
+              <span class="inline-flex items-center rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-800">
+                {{ term }}
+              </span>
+            {% endfor %}
+            
+          </div>
+        </div>
+        
+      </div>
+    {% empty %}
+      <!-- Show this if there are no topics -->
+      <div class="col-span-1 md:col-span-2 lg:col-span-3">
+        <div class="bg-white text-center p-12 rounded-lg shadow-sm border border-gray-200">
+          <i data-lucide="search-x" class="w-12 h-12 mx-auto text-slate-400"></i>
+          <h3 class="mt-4 text-xl font-semibold text-slate-700">No Topics Found</h3>
+          <p class="mt-2 text-slate-500">The analysis did not discover any topics. You may need to upload more data.</p>
+        </div>
+      </div>
+    {% endfor %}
+    
+  </div>
+
+</div>
+
+
+{% endblock %}
