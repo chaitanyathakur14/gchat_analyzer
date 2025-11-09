@@ -1,5 +1,3 @@
-# render.yaml - Render deployment configuration for Django
-
 services:
   - type: web
     name: foml_project_web
