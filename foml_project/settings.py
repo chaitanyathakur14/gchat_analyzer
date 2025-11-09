@@ -71,12 +71,16 @@ WSGI_APPLICATION = 'foml_project.wsgi.application'
 # DATABASE CONFIGURATION
 # ======================================================
 # Render sets DATABASE_URL in environment automatically
+# ======================================================
+# DATABASE CONFIGURATION (CSV-based project only)
+# ======================================================
 DATABASES = {
-    'default': dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',  # No database file needed
+    }
 }
+
 
 # ======================================================
 # PASSWORD VALIDATORS
