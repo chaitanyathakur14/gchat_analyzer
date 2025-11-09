@@ -1,10 +1,9 @@
 """
-Django settings for foml_project project (Render-ready).
+Django settings for foml_project project (Render-ready, CSV-based).
 """
 
 from pathlib import Path
 import os
-import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -15,7 +14,7 @@ SECRET_KEY = os.environ.get(
     'SECRET_KEY', 'django-insecure-!!su$%pe(#-tss=#vy#r@b2g97g49=nk=p6$0azb9cy!n=z-x4'
 )
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
-ALLOWED_HOSTS = ['*']  # Allow all for now (Render will handle domain)
+ALLOWED_HOSTS = ['*']  # Render will handle domain
 
 # ======================================================
 # APPLICATIONS
@@ -35,7 +34,7 @@ INSTALLED_APPS = [
 # ======================================================
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # ⚡ Serve static files efficiently
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -70,14 +69,11 @@ WSGI_APPLICATION = 'foml_project.wsgi.application'
 # ======================================================
 # DATABASE CONFIGURATION
 # ======================================================
-# Render sets DATABASE_URL in environment automatically
-# ======================================================
-# DATABASE CONFIGURATION (CSV-based project only)
-# ======================================================
+# No database needed for CSV-only workflow
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',  # No database file needed
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -112,6 +108,12 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # ======================================================
+# UPLOAD DIRECTORY (for CSV uploads)
+# ======================================================
+UPLOAD_DIR = os.path.join(MEDIA_ROOT, 'uploads')
+os.makedirs(UPLOAD_DIR, exist_ok=True)  # create uploads dir if missing
+
+# ======================================================
 # DEFAULT PRIMARY KEY
 # ======================================================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -123,3 +125,10 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 CSRF_TRUSTED_ORIGINS = [
     'https://*.onrender.com',
 ]
+
+# ======================================================
+# DEBUGGING LOGGING (Optional)
+# ======================================================
+if DEBUG:
+    import logging
+    logging.basicConfig(level=logging.DEBUG)

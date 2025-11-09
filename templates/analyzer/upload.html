@@ -2,11 +2,21 @@
 {% block content %}
 <div class="card p-4">
   <h3>Upload Chat CSV</h3>
+
+  <!-- Error message -->
+  {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     {{ form.as_p }}
     <button class="btn btn-primary" type="submit">Upload</button>
   </form>
+
+  {% if uploaded_file_name %}
+    <p class="mt-2"><strong>Uploaded file:</strong> {{ uploaded_file_name }}</p>
+  {% endif %}
 
   <small class="text-muted mt-3 d-block">
     Upload the file exported from ChatGPT (chatgpt_chats_clean.csv).
@@ -27,8 +37,11 @@
     <h5 class="text-info mt-3">📘 Showing default ChatGPT chats (developer’s data)</h5>
   {% endif %}
 
-  <div class="mt-3">
-    {{ chat_preview|safe }}
-  </div>
+  <!-- Chat preview -->
+  {% if chat_preview %}
+    <div class="mt-3">
+      {{ chat_preview|safe }}
+    </div>
+  {% endif %}
 </div>
 {% endblock %}
