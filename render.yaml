@@ -6,8 +6,7 @@ services:
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
-      python manage.py collectstatic --noinput
-      python manage.py migrate
+      python manage.py collectstatic
     startCommand: gunicorn foml_project.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: SECRET_KEY
@@ -16,9 +15,6 @@ services:
       - key: DEBUG
         fromDatabase: false
         value: "False"
-      - key: DATABASE_URL
-        fromDatabase: false
-        value: "sqlite:///db.sqlite3"
     autoDeploy: true
 
 staticPublishPath: staticfiles
