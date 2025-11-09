@@ -5,41 +5,43 @@ import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.decomposition import LatentDirichletAllocation, PCA
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from textstat import flesch_reading_ease
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.corpus import stopwords                                           
 from sklearn.cluster import KMeans, AgglomerativeClustering
 from sklearn.svm import SVC
-from sklearn.neural_network import MLPClassifier
 from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score
 
-nltk.download('vader_lexicon', quiet=True)
-nltk.download('stopwords', quiet=True)
-sia = SentimentIntensityAnalyzer()
-CSV_PATH = r"C:\Users\CHAITANYA THAKUR\Downloads\chatgpt_chats_clean.csv"
-def load_csv(uploaded_path=None, default_path=CSV_PATH):
-    """
-    Load uploaded CSV if provided, else load default CSV.
-    """
-    path_to_use = uploaded_path if uploaded_path and os.path.exists(uploaded_path) else default_path
+try:
+    nltk.data.find('sentiment/vader_lexicon.zip')
+except LookupError:
+    nltk.download('vader_lexicon', quiet=True)
 
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords', quiet=True)
+
+sia = SentimentIntensityAnalyzer()
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CSV_PATH = os.path.join(BASE_DIR, "analyzer", "data", "chatgpt_chats_clean.csv")
+
+def load_csv(uploaded_path=None):
+    path_to_use = uploaded_path if uploaded_path and os.path.exists(uploaded_path) else CSV_PATH
     if not os.path.exists(path_to_use):
         raise FileNotFoundError(f"CSV not found at: {path_to_use}")
-
     df = pd.read_csv(path_to_use)
     expected_cols = ['Conversation_Title', 'Role', 'Message']
     for col in expected_cols:
         if col not in df.columns:
             raise KeyError(f"Missing expected column: {col}")
-
-    print(f"Loaded CSV: {path_to_use}")
     return df.head(1000)
-
 
 def run_sentiment(df):
     assistant_msgs = df[df['Role'].str.lower() == 'assistant'].copy()
@@ -60,13 +62,9 @@ def run_sentiment(df):
     svm_model = SVC(kernel='linear', probability=True)
     svm_model.fit(X_train, y_train)
     y_pred_svm = svm_model.predict(X_test)
-    svm_acc = accuracy_score(y_test, y_pred_svm)
-    print(f"SVM Accuracy: {svm_acc:.2f}")
     knn_model = KNeighborsClassifier(n_neighbors=min(5, max(1, len(X_train)//5)))
     knn_model.fit(X_train, y_train)
-    y_pred_knn = knn_model.predict(X_test)
-    knn_acc = accuracy_score(y_test, y_pred_knn)
-    print(f"KNN Accuracy: {knn_acc:.2f}")
+    assistant_msgs['KNN_Pred_Label'] = le.inverse_transform(knn_model.predict(X))
     try:
         probs = svm_model.predict_proba(X)
         pos_idx = 0
@@ -75,9 +73,8 @@ def run_sentiment(df):
                 pos_idx = idx
                 break
         assistant_msgs['SVM_Pos_Prob'] = probs[:, pos_idx]
-    except Exception:
+    except:
         assistant_msgs['SVM_Pos_Prob'] = np.nan
-    assistant_msgs['KNN_Pred_Label'] = le.inverse_transform(knn_model.predict(X))
     return assistant_msgs
 
 def run_topics(df, n_topics=5):
@@ -92,7 +89,7 @@ def run_topics(df, n_topics=5):
     topics = [{'topic_id': i, 'terms': [feature_names[j] for j in comp.argsort()[:-11:-1]]} for i, comp in enumerate(lda.components_)]
     try:
         dense = dtm.toarray()
-    except Exception:
+    except:
         dense = dtm.todense()
     pca = PCA(n_components=2, random_state=42)
     reduced = pca.fit_transform(dense)
@@ -104,9 +101,8 @@ def run_topics(df, n_topics=5):
         knn_for_kmeans = KNeighborsClassifier(n_neighbors=5)
         knn_for_kmeans.fit(reduced, df['Cluster_KMeans'])
         df.attrs['knn_for_kmeans'] = knn_for_kmeans
-    except Exception:
+    except:
         pass
-    print(f"Topics extracted & clustered into {n_topics} groups.")
     return topics, df
 
 def compute_quality(df):
@@ -125,10 +121,9 @@ def compute_quality(df):
         pcs = pca.fit_transform(scaled)
         df2['quality_PC1'] = pcs[:, 0]
         df2['quality_PC2'] = pcs[:, 1]
-    except Exception:
+    except:
         df2['quality_PC1'] = np.nan
         df2['quality_PC2'] = np.nan
-    print("Quality scores computed.")
     return df2
 
 def compute_repetition(df):
@@ -140,7 +135,6 @@ def compute_repetition(df):
     sims = cosine_similarity(X)
     repetition_score = np.mean(sims)
     df['Semantic_Repetition'] = repetition_score
-    print(f"Average semantic repetition score: {repetition_score:.3f}")
     try:
         dense = X.toarray()
         pca = PCA(n_components=min(10, dense.shape[1]), random_state=42)
@@ -149,7 +143,7 @@ def compute_repetition(df):
         distances, indices = nn.kneighbors(red)
         avg_neighbor_dist = distances.mean(axis=1)
         df['Avg_NN_Dist_PCA'] = avg_neighbor_dist
-    except Exception:
+    except:
         df['Avg_NN_Dist_PCA'] = np.nan
     return df
 
@@ -167,7 +161,7 @@ def find_similar_responses(df, query, k=3):
         dist, idxs = nn.kneighbors(q_vec, n_neighbors=k)
         knn_sims = np.clip(1 - dist.flatten() / (np.max(dist) + 1e-9), 0, 1)
         results['KNN_Similarity'] = knn_sims
-    except Exception:
+    except:
         results['KNN_Similarity'] = np.nan
     return results
 
@@ -202,5 +196,4 @@ def lda_on_sentiment_features(df):
     lda = LinearDiscriminantAnalysis()
     lda.fit(X_red, y)
     transformed = lda.transform(X_red)
-    print("LDA done — discriminant shape:", transformed.shape)
     return lda, transformed, pca, vectorizer

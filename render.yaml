@@ -1,0 +1,26 @@
+# render.yaml - Render deployment configuration for Django
+
+services:
+  - type: web
+    name: foml_project_web
+    env: python
+    plan: free
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+      python manage.py migrate
+    startCommand: gunicorn foml_project.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: SECRET_KEY
+        fromDatabase: false
+        value: "django-insecure-!!su$%pe(#-tss=#vy#r@b2g97g49=nk=p6$0azb9cy!n=z-x4"
+      - key: DEBUG
+        fromDatabase: false
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase: false
+        value: "sqlite:///db.sqlite3"
+    autoDeploy: true
+
+staticPublishPath: staticfiles

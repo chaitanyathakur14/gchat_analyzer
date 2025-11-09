@@ -1,11 +1,9 @@
-# analyzer/views.py
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.conf import settings
 import os
 import pandas as pd
 import json
-
 from .utils import (
     CSV_PATH, load_csv, run_sentiment, run_topics,
     compute_quality, compute_repetition, compute_repetition_pairs,
@@ -13,31 +11,19 @@ from .utils import (
 )
 from .forms import UploadFileForm
 
-# ===== Upload Directory =====
 UPLOAD_DIR = os.path.join(settings.MEDIA_ROOT, 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-
-# ===== Helper Function =====
 def get_active_csv(request):
-    """Return uploaded CSV path if available, else default CSV."""
     path = request.session.get('uploaded_csv')
     if path and os.path.exists(path):
         return path
     return CSV_PATH
 
-
-# ====== HOME ======
 def home(request):
     return render(request, 'analyzer/home.html')
 
-
-# ====== UPLOAD FILE ======
 def upload_file(request):
-    """
-    If user uploads a file, save it and redirect to dashboard.
-    Otherwise, user can proceed with default developer chats.
-    """
     if request.method == 'POST':
         form = UploadFileForm(request.POST, request.FILES)
         if form.is_valid():
@@ -50,23 +36,17 @@ def upload_file(request):
             return redirect('dashboard')
     else:
         form = UploadFileForm()
-
     has_upload = bool(request.session.get('uploaded_csv'))
     return render(request, 'analyzer/upload.html', {'form': form, 'has_upload': has_upload})
 
-
-# ====== DASHBOARD ======
 def dashboard(request):
     path = get_active_csv(request)
     df = load_csv(path)
     using_default = (path == CSV_PATH)
-
     total_msgs = len(df)
     assistant_msgs = df[df['Role'].str.lower() == 'assistant']
     total_assist = len(assistant_msgs)
-
     sent_df = run_sentiment(assistant_msgs)
-
     conv_summary = (
         sent_df.groupby("Conversation_Title")["Sentiment_Label"]
         .value_counts(normalize=True)
@@ -74,107 +54,66 @@ def dashboard(request):
         .unstack(fill_value=0)
         .reset_index()
     )
-    conv_summary["Total_Messages"] = (
-        sent_df.groupby("Conversation_Title").size().values
-    )
-    conv_summary = conv_summary.rename(
-        columns={
-            "Conversation_Title": "Conversation",
-            "Positive": "Positive %",
-            "Negative": "Negative %",
-            "Neutral": "Neutral %",
-        }
-    )
-
+    conv_summary["Total_Messages"] = sent_df.groupby("Conversation_Title").size().values
+    conv_summary = conv_summary.rename(columns={
+        "Conversation_Title": "Conversation",
+        "Positive": "Positive %",
+        "Negative": "Negative %",
+        "Neutral": "Neutral %"
+    })
     summary_table = conv_summary.to_dict(orient="records")
-    summary = {
-        'total_msgs': total_msgs,
-        'total_assistant': total_assist,
-        'using_default': using_default
-    }
-
+    summary = {'total_msgs': total_msgs, 'total_assistant': total_assist, 'using_default': using_default}
     return render(request, 'analyzer/dashboard.html', {'summary': summary, 'summary_table': summary_table})
 
-
-# ====== SENTIMENT VIEW ======
 def sentiment_view(request):
     df = load_csv(get_active_csv(request))
     df['Role'] = df['Role'].astype(str).str.lower().str.strip()
     assistant = df[df['Role'] == 'assistant']
     assistant = run_sentiment(assistant)
-
     counts = assistant['Sentiment_Label'].value_counts().to_dict()
-    counts = {
-        'Positive': counts.get('Positive', 0),
-        'Neutral': counts.get('Neutral', 0),
-        'Negative': counts.get('Negative', 0)
-    }
-
+    counts = {'Positive': counts.get('Positive', 0), 'Neutral': counts.get('Neutral', 0), 'Negative': counts.get('Negative', 0)}
     return render(request, 'analyzer/sentiment.html', {'counts': counts})
 
-
-# ====== API ENDPOINTS ======
 def api_messages(request):
     q = request.GET.get('q', '').lower()
     sentiment = request.GET.get('sentiment')
     conversation = request.GET.get('conversation')
     limit = int(request.GET.get('limit', 100))
-
     df = load_csv(get_active_csv(request))
     df = run_sentiment(df)
-
     required_cols = ["Role", "Conversation_Title", "Message", "Sentiment_Label"]
     for col in required_cols:
         if col not in df.columns:
             df[col] = ""
-
-  
     df = df.fillna("")
-
-
     if conversation and conversation != "__all__":
         df = df[df["Conversation_Title"] == conversation]
     if sentiment:
         df = df[df["Sentiment_Label"].str.lower() == sentiment.lower()]
     if q:
         df = df[df["Message"].str.lower().str.contains(q)]
-
-
-    records = (
-        df.head(limit)[required_cols]
-        .replace({pd.NA: "", None: ""})
-        .to_dict("records")
-    )
-
+    records = df.head(limit)[required_cols].replace({pd.NA: "", None: ""}).to_dict("records")
     return JsonResponse({"messages": records})
-
 
 def api_sentiment_summary(request):
     conversation = request.GET.get('conversation')
     df = load_csv(get_active_csv(request))
     df = run_sentiment(df)
-
     if conversation and conversation != "__all__":
         df = df[df["Conversation_Title"] == conversation]
-
     counts = df["Sentiment_Label"].value_counts().to_dict()
     return JsonResponse({"counts": counts})
-
 
 def api_conversations(request):
     df = load_csv(get_active_csv(request))
     convs = sorted(df["Conversation_Title"].dropna().unique().tolist())
     return JsonResponse({"conversations": convs})
 
-
-# ====== TOPICS VIEW ======
 def topics_view(request):
     df = load_csv(get_active_csv(request))
-    topics, df_topics = run_topics(df, n_topics=6)
+    topics, _ = run_topics(df, n_topics=6)
     return render(request, 'analyzer/topics.html', {'topics': topics})
 
-
-# ====== QUALITY VIEW ======
 def quality_view(request):
     df = load_csv(get_active_csv(request))
     assistant = run_sentiment(df)
@@ -183,143 +122,57 @@ def quality_view(request):
     bottom = qdf.sort_values('quality_score').head(10).to_dict('records')
     return render(request, 'analyzer/quality.html', {'top': top, 'bottom': bottom})
 
-
-# ====== API METRICS ======
 def api_metrics(request):
-    """Return metrics for dashboard cards."""
     conv = request.GET.get("conversation")
     df = load_csv(get_active_csv(request))
     df = run_sentiment(df)
-
     if conv and conv != "__all__":
         df = df[df["Conversation_Title"] == conv]
-
     if df.empty:
-        return JsonResponse({
-            "accuracy": 0,
-            "loss": 0,
-            "positive_percent": 0,
-            "repetitive_percent": 0
-        })
-
-    # Calculate basic metrics
+        return JsonResponse({"accuracy": 0, "loss": 0, "positive_percent": 0, "repetitive_percent": 0})
     total = len(df)
     pos = (df["Sentiment_Label"] == "Positive").sum()
     positive_percent = round((pos / total) * 100, 2) if total > 0 else 0
-
     rep_df = compute_repetition(df)
     repetitive_percent = float(rep_df["Semantic_Repetition"].mean()) if "Semantic_Repetition" in rep_df.columns else 0.0
-
-    # Dummy placeholders for now (replace with your model's metrics if needed)
     accuracy = round(80 + (positive_percent / 10), 2)
     loss = round(1 - accuracy / 100, 3)
+    return JsonResponse({"accuracy": accuracy, "loss": loss, "positive_percent": positive_percent, "repetitive_percent": repetitive_percent})
 
-    return JsonResponse({
-        "accuracy": accuracy,
-        "loss": loss,
-        "positive_percent": positive_percent,
-        "repetitive_percent": repetitive_percent
-    })
-
-
-# ====== REPETITION VIEW ======
 def repetition_view(request):
     df = load_csv(get_active_csv(request))
     df_assistant = df[df['Role'].str.lower() == 'assistant'].copy().reset_index(drop=True)
-
     df_rep = compute_repetition(df_assistant)
     avg_score = round(df_rep['Semantic_Repetition'].iloc[0], 3) if not df_rep.empty else 0.0
-
-    df_pairs = pd.DataFrame({
-        'Message1': df_assistant['Message'][:-1].values,
-        'Message2': df_assistant['Message'][1:].values
-    })
-
+    df_pairs = pd.DataFrame({'Message1': df_assistant['Message'][:-1].values, 'Message2': df_assistant['Message'][1:].values})
     df_pairs = compute_repetition_pairs(df_pairs)
-    repetitive_pairs = (
-        df_pairs[df_pairs['Is_Repetitive'] == 1]
-        .sort_values('similarity_score', ascending=False)
-        .head(10)
-        .to_dict(orient='records')
-    )
-
+    repetitive_pairs = df_pairs[df_pairs['Is_Repetitive'] == 1].sort_values('similarity_score', ascending=False).head(10).to_dict(orient='records')
     query = request.GET.get('query')
     similar_responses = None
     if query:
         similar_responses = find_similar_responses(df_assistant, query, k=5).to_dict(orient='records')
-
     repetitive_pairs_json = json.dumps(repetitive_pairs)
-
-    context = {
-        'avg_score': avg_score,
-        'repetitive_pairs': repetitive_pairs,
-        'repetitive_pairs_json': repetitive_pairs_json,
-        'similar_responses': similar_responses,
-        'query': query or ''
-    }
-
+    context = {'avg_score': avg_score, 'repetitive_pairs': repetitive_pairs, 'repetitive_pairs_json': repetitive_pairs_json, 'similar_responses': similar_responses, 'query': query or ''}
     return render(request, 'analyzer/repetition.html', context)
 
-# ====== RESET / DELETE UPLOADED CSV ======
 def reset_csv(request):
-    """Delete uploaded CSV and revert to default dataset."""
     path = request.session.get('uploaded_csv')
-
-    # Remove file from server if it exists
     if path and os.path.exists(path):
         os.remove(path)
-
-    # Clear session key
     request.session.pop('uploaded_csv', None)
-
-    # Redirect to upload page
     return redirect('upload')
-from django.http import JsonResponse
-from collections import Counter
-import pandas as pd
-# ====== API: TOPICS DATA ======
-def api_topics(request):
-    """Return top topics for bar chart."""
-    df = load_csv(get_active_csv(request))
-    try:
-        topics, df_topics = run_topics(df, n_topics=6)
-        # topics is already a dict {topic: count}
-        return JsonResponse(topics)
-    except Exception as e:
-        print("api_topics error:", e)
-        return JsonResponse({}, status=500)
 
-
-# ====== API: CONVERSATION ACTIVITY ======
-def api_activity(request):
-    """Return message count per conversation for activity chart."""
-    df = load_csv(get_active_csv(request))
-    try:
-        conv_activity = df['Conversation_Title'].value_counts().to_dict()
-        return JsonResponse(conv_activity)
-    except Exception as e:
-        print("api_activity error:", e)
-        return JsonResponse({}, status=500)
-from django.http import JsonResponse
-import pandas as pd
-import os
-# ====== API: TOPICS DATA ======
 def api_topics(request):
-    """Return top topics for bar chart."""
     df = load_csv(get_active_csv(request))
     try:
         if "Conversation_Title" not in df.columns or df.empty:
             return JsonResponse({}, safe=False)
         topics = df["Conversation_Title"].value_counts().head(10).to_dict()
         return JsonResponse(topics, safe=False)
-    except Exception as e:
-        print("api_topics error:", e)
+    except:
         return JsonResponse({}, status=500)
 
-
-# ====== API: CONVERSATION ACTIVITY ======
 def api_activity(request):
-    """Return conversation activity for line chart."""
     df = load_csv(get_active_csv(request))
     try:
         if "Timestamp" in df.columns:
@@ -327,9 +180,7 @@ def api_activity(request):
             df["Date"] = df["Timestamp"].dt.date
             activity = df["Date"].value_counts().sort_index().to_dict()
         else:
-            # fallback: count per conversation if no timestamps
             activity = df["Conversation_Title"].value_counts().to_dict()
         return JsonResponse(activity, safe=False)
-    except Exception as e:
-        print("api_activity error:", e)
+    except:
         return JsonResponse({}, status=500)
