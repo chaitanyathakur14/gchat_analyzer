@@ -50,11 +50,8 @@ It helps understand how AI communicates — identifying tone, clarity, and recur
 * Extendable for AI transparency and response quality monitoring
 
 
-
-
+## Working
 
 **GitHub Repository:** [https://github.com/chaitanyathakur14/gchat_analyzer](https://github.com/chaitanyathakur14/gchat_analyzer)  
 **Live Demo (Render):** [https://gchat-analyzer.onrender.com](https://gchat-analyzer.onrender.com)
 
-
-Would you like me to include a **short “How to run”** section (setup + runserver) at the end for clarity?
